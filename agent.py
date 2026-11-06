@@ -25,6 +25,8 @@ class TradingAgent:
 
         # News-only regime state
         self.news_days_held = 0
+        self.mood_history = []
+        self.max_hold_news = 6
 
         self.positive_words = {
             "surge", "rally", "gain", "breakout", "inflow", "boom",
@@ -370,6 +372,14 @@ class TradingAgent:
     def decide(self, bar, headlines, cash, shares, last_response):
 
         sentiment = self.calculate_news_sentiment(headlines)
+        mood_today = sentiment if headlines is not None else 0
+
+        self.mood_history.append(mood_today)
+
+        if len(self.mood_history) > 5:
+            self.mood_history.pop(0)
+
+        recent_mood = sum(self.mood_history)
 
         # Reset counters after rejected orders
         if last_response == "REJECT":
@@ -387,7 +397,8 @@ class TradingAgent:
 
                 # Exit as soon as sentiment is no longer positive,
                 # or after 4 days to limit stale-news exposure.
-                if sentiment <= 0 or self.news_days_held >= 4:
+                # Exit on negative sentiment or stale news
+                if recent_mood <= -2 or sentiment < 0 or self.news_days_held >= self.max_hold_news:
                     self.previous_action = "SELL"
                     self.days_since_trade = 0
                     self.news_days_held = 0
@@ -399,7 +410,8 @@ class TradingAgent:
 
             # Require stronger positive news and a longer cooldown
             # to avoid repeatedly entering on weak headlines.
-            if cash > 0 and self.days_since_trade >= 10 and sentiment >= 3:
+            # Require sustained positive news sentiment
+            if cash > 0 and self.days_since_trade >= 5 and recent_mood >= 2:
                 self.previous_action = "BUY"
                 self.days_since_trade = 0
                 self.news_days_held = 0
